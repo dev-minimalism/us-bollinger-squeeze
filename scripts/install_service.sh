@@ -1,15 +1,18 @@
+#!/bin/bash
 # ===================================================================================
 # 6. install_service.sh - systemd 서비스 설치 (선택사항)
 # ===================================================================================
 
-#!/bin/bash
 # install_service.sh
 
 echo "🔧 systemd 서비스 설치"
 echo "===================="
 
-# 현재 디렉토리
-CURRENT_DIR="$(pwd)"
+# 프로젝트 루트로 이동
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+CURRENT_DIR="$PROJECT_ROOT"
 USER_NAME="$(whoami)"
 
 # 서비스 파일 생성

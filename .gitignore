@@ -59,5 +59,4 @@ htmlcov/
 
 /.venv
 .idea
-/trading_monitor.log
 /venv/

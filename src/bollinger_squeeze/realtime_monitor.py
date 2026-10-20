@@ -23,6 +23,8 @@ import requests
 import yfinance as yf
 from telegram.ext import Application, CommandHandler
 
+from .paths import monitor_log_path
+
 warnings.filterwarnings('ignore')
 
 
@@ -129,7 +131,7 @@ class RealTimeVolatilityMonitor:
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-          logging.FileHandler('trading_monitor.log'),
+          logging.FileHandler(monitor_log_path(), encoding='utf-8'),
           logging.StreamHandler()
         ]
     )

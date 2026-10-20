@@ -19,13 +19,16 @@ import signal
 import sys
 from datetime import datetime, timedelta
 
-# 모듈 import
+# 모듈 import (src/ 레이아웃)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
+
 try:
-  from backtest_strategy import VolatilityBollingerBacktest
-  from realtime_monitor import RealTimeVolatilityMonitor
+  from bollinger_squeeze.backtest_strategy import VolatilityBollingerBacktest
+  from bollinger_squeeze.paths import monitor_log_path
+  from bollinger_squeeze.realtime_monitor import RealTimeVolatilityMonitor
 except ImportError as e:
   print(f"❌ 모듈 import 오류: {e}")
-  print("📁 backtest_strategy.py와 realtime_monitor.py 파일이 같은 디렉토리에 있는지 확인하세요.")
+  print("📁 src/bollinger_squeeze/ 폴더와 requirements.txt 설치 여부를 확인하세요.")
   sys.exit(1)
 
 # ===================================================================================
@@ -34,10 +37,7 @@ except ImportError as e:
 
 def setup_logging():
   """백그라운드 실행을 위한 로깅 설정"""
-  log_dir = "output_files/logs"
-  os.makedirs(log_dir, exist_ok=True)
-
-  log_filename = os.path.join(log_dir, f"monitor_{datetime.now().strftime('%Y%m%d')}.log")
+  log_filename = monitor_log_path()
 
   logging.basicConfig(
       level=logging.INFO,

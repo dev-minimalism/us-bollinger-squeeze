@@ -1,12 +1,17 @@
+#!/bin/bash
 # ===================================================================================
 # 2. stop_monitor.sh - 백그라운드 모니터링 중지 스크립트
 # ===================================================================================
 
-#!/bin/bash
 # stop_monitor.sh
 
 echo "⏹️  변동성 폭파 모니터링 중지"
 echo "=========================="
+
+# 프로젝트 루트로 이동
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 # PID 파일 경로
 PID_FILE="output_files/monitor.pid"

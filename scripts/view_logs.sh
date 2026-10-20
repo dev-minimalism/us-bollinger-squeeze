@@ -1,12 +1,17 @@
+#!/bin/bash
 # ===================================================================================
 # 5. view_logs.sh - 로그 실시간 보기 스크립트
 # ===================================================================================
 
-#!/bin/bash
 # view_logs.sh
 
 echo "📋 변동성 폭파 모니터링 로그 실시간 조회"
 echo "=================================="
+
+# 프로젝트 루트로 이동
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 # 로그 파일 경로
 LOG_FILE="output_files/logs/monitor_$(date +%Y%m%d).log"

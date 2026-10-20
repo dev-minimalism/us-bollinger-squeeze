@@ -1,12 +1,11 @@
-[![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)](https://www.python.org)
-[![yfinance](https://img.shields.io/badge/yfinance-410093)](https://pypi.org/project/yfinance/)
-[![Backtrader](https://img.shields.io/badge/Backtrader-4B8BBE)](https://www.backtrader.com)
-[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/bots)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 # 변동성 폭파 볼린저 밴드 트레이딩 시스템
 
 변동성 압축(Bollinger Squeeze) 후 폭파를 노리는 볼린저 밴드 기반 백테스트 및 실시간 알림 시스템입니다. 미국 시총 상위 50개 종목을 대상으로 하며, 데이터는 Yahoo Finance(`yfinance`)에서 가져옵니다.
+
+[![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![yfinance](https://img.shields.io/badge/yfinance-410093)](https://pypi.org/project/yfinance/)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/bots)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 🚀 주요 기능
 
@@ -15,12 +14,12 @@
 - RSI 과매수 + 변동성 압축 시 매수 신호
 - 분할 익절: 50% 익절 → 나머지 전량 매도
 
-### 2. 백테스트 (`backtest_strategy.py`)
+### 2. 백테스트 (`src/bollinger_squeeze/backtest_strategy.py`)
 - 전략 모드 3종: 보수적 / 균형 / 공격적
 - 백테스트 유형: 개별 종목 분석, 균등 배분 포트폴리오, 통합 포트폴리오(동적 자금 관리)
 - 성과 지표(수익률, 승률, 손익비, 최대낙폭 등), 차트, CSV, 리포트 생성
 
-### 3. 실시간 모니터링 (`realtime_monitor.py`)
+### 3. 실시간 모니터링 (`src/bollinger_squeeze/realtime_monitor.py`)
 - 미국 정규장 시간(한국 시간 기준 자동 변환, 주말/공휴일 제외)에만 스캔
 - 신호 발생 시 텔레그램 알림 (종목 한글명 포함)
 - 종목·신호별 1시간 쿨다운으로 중복 알림 방지
@@ -41,16 +40,20 @@ pip install -r requirements.txt
 ### 파일 구조
 ```
 us-bollinger-squeeze/
-├── main.py                 # CLI 진입점
-├── backtest_strategy.py    # 백테스트 모듈
-├── realtime_monitor.py     # 실시간 모니터링 + 텔레그램 봇
-├── start_monitor.sh        # 백그라운드 모니터링 시작
-├── stop_monitor.sh         # 중지
-├── restart_monitor.sh      # 재시작
-├── status_monitor.sh       # 상태 확인 (PID, 메모리, CPU)
-├── view_logs.sh            # 로그 보기
-├── install_service.sh      # systemd 서비스 등록 (Linux)
-└── output_files/           # 결과·차트·리포트·로그 (자동 생성, git 제외)
+├── main.py                       # CLI 진입점
+├── src/
+│   └── bollinger_squeeze/
+│       ├── backtest_strategy.py  # 백테스트 모듈
+│       ├── realtime_monitor.py   # 실시간 모니터링 + 텔레그램 봇
+│       └── paths.py              # 프로젝트 루트 기준 출력/로그 경로
+├── scripts/
+│   ├── start_monitor.sh          # 백그라운드 모니터링 시작
+│   ├── stop_monitor.sh           # 중지
+│   ├── restart_monitor.sh        # 재시작
+│   ├── status_monitor.sh         # 상태 확인 (PID, 메모리, CPU)
+│   ├── view_logs.sh              # 로그 보기
+│   └── install_service.sh        # systemd 서비스 등록 (Linux)
+└── output_files/                 # 결과·차트·리포트·로그 (자동 생성, git 제외)
 ```
 
 ## 🔧 사용 방법
@@ -93,28 +96,30 @@ python main.py --mode both             # 백테스트 후 모니터링 (기본�
 ### 백그라운드 실행
 
 ```bash
-./start_monitor.sh     # nohup으로 monitor-default 실행, PID는 output_files/monitor.pid
-./status_monitor.sh    # 실행 상태 확인
-./view_logs.sh         # 로그 보기
-./restart_monitor.sh   # 재시작
-./stop_monitor.sh      # 중지
+./scripts/start_monitor.sh     # nohup으로 monitor-default 실행, PID는 output_files/monitor.pid
+./scripts/status_monitor.sh    # 실행 상태 확인
+./scripts/view_logs.sh         # 로그 보기
+./scripts/restart_monitor.sh   # 재시작
+./scripts/stop_monitor.sh      # 중지
 ```
 
 systemd 서비스로 등록하려면 (Linux):
 ```bash
-./install_service.sh
+./scripts/install_service.sh
 sudo systemctl start volatility-monitor
 ```
 
 ### 로그 위치
-- `monitor-default` 모드: `output_files/logs/monitor_YYYYMMDD.log`
-- `monitor` / `both` 모드: 실행 디렉토리의 `trading_monitor.log`
-- `start_monitor.sh`의 표준 출력: `output_files/logs/nohup.out`
+모든 모드의 로그는 실행 위치와 관계없이 `output_files/logs/monitor_YYYYMMDD.log`에 기록됩니다. `start_monitor.sh`의 표준 출력은 `output_files/logs/nohup.out`에 남습니다.
+
+스크립트는 어느 디렉토리에서 실행해도 프로젝트 루트로 이동한 뒤 동작합니다.
 
 ### 모듈 직접 사용
 
+프로젝트 루트에서 `src`를 경로에 추가한 뒤 import합니다 (예: `PYTHONPATH=src python`).
+
 ```python
-from backtest_strategy import VolatilityBollingerBacktest
+from bollinger_squeeze.backtest_strategy import VolatilityBollingerBacktest
 
 backtest = VolatilityBollingerBacktest(initial_capital=10000, strategy_mode="balanced")
 results = backtest.run_multi_stock_backtest("2022-01-01", "2024-01-01", max_stocks=20)
@@ -123,7 +128,7 @@ portfolio = backtest.run_true_portfolio_backtest("2022-01-01", "2024-01-01")
 
 ```python
 import os
-from realtime_monitor import RealTimeVolatilityMonitor
+from bollinger_squeeze.realtime_monitor import RealTimeVolatilityMonitor
 
 monitor = RealTimeVolatilityMonitor(
     telegram_bot_token=os.getenv("US_BOLLINGER_TELEGRAM_BOT_TOKEN"),
@@ -200,7 +205,7 @@ BB 위치: 0.08
 - 종목 한글명: `RealTimeVolatilityMonitor.ticker_to_korean`
 - 알림 쿨다운 / Heartbeat 간격: `alert_cooldown`, `heartbeat_interval` (기본 3600초)
 
-신호 계산 로직은 `backtest_strategy.py`와 `realtime_monitor.py`에 각각 구현되어 있으므로, 전략을 바꿀 때는 두 파일을 함께 수정해야 합니다.
+신호 계산 로직은 `src/bollinger_squeeze/`의 `backtest_strategy.py`와 `realtime_monitor.py`에 각각 구현되어 있으므로, 전략을 바꿀 때는 두 파일을 함께 수정해야 합니다.
 
 ## 📊 성과 지표 설명
 

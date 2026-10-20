@@ -9,22 +9,20 @@ A Bollinger Band "volatility squeeze" trading system for the top ~50 US large-ca
 ## Commands
 
 ```bash
-pip install -r requirements.txt          # pinned versions (README's requirements list is outdated)
+pip install -r requirements.txt          # pinned direct imports only; pip resolves transitive deps
 
 python main.py --mode backtest           # interactive: prompts on stdin for capital, strategy mode, dates
 python main.py --mode monitor            # interactive real-time monitoring
 python main.py --mode monitor-default    # non-interactive monitoring with defaults (used by the scripts and systemd)
 python main.py --mode both               # default: backtest, wait for Enter, then monitor
 
-./start_monitor.sh / ./stop_monitor.sh / ./restart_monitor.sh / ./status_monitor.sh / ./view_logs.sh
-./install_service.sh                     # installs systemd unit `volatility-monitor` (Linux)
+scripts/start_monitor.sh / stop_monitor.sh / restart_monitor.sh / status_monitor.sh / view_logs.sh
+scripts/install_service.sh               # installs systemd unit `volatility-monitor` (Linux)
 ```
 
-`start_monitor.sh` runs `monitor-default` with nohup and writes its PID to `output_files/monitor.pid`.
+Every script `cd`s to the project root first (its parent dir), so it can be run from anywhere. `start_monitor.sh` runs `monitor-default` with nohup and writes its PID to `output_files/monitor.pid`.
 
-Where logs end up depends on the mode, because both `main.py` and `realtime_monitor.py` call `logging.basicConfig` and only the first call takes effect:
-- `monitor-default` calls `setup_logging()` first, so logs go to `output_files/logs/monitor_YYYYMMDD.log`.
-- `monitor` and `both` don't, so the monitor's own config applies and logs go to `./trading_monitor.log` in the current directory.
+All paths are anchored to the project root via `src/bollinger_squeeze/paths.py` (`PROJECT_ROOT`, `OUTPUT_DIR`, `monitor_log_path()`), never the CWD. Logs from every mode go to `output_files/logs/monitor_YYYYMMDD.log`. Both `main.setup_logging()` and `RealTimeVolatilityMonitor.__init__` call `logging.basicConfig` with that same file; whichever runs first wins.
 
 There are no tests, linter, or build step.
 
@@ -34,11 +32,13 @@ The code reads `US_BOLLINGER_TELEGRAM_BOT_TOKEN` and `US_BOLLINGER_TELEGRAM_CHAT
 
 ## Architecture
 
+Source uses a src layout: the package is `src/bollinger_squeeze/` (relative imports inside it). `main.py` stays at the root and inserts `src/` into `sys.path`. To import the modules elsewhere, use `PYTHONPATH=src`.
+
 - `main.py`: argparse CLI that dispatches to the two modules. It also handles interactive config and SIGINT/SIGTERM shutdown.
 - `backtest_strategy.py` → `VolatilityBollingerBacktest(initial_capital, strategy_mode)`
   - `strategy_mode` is `conservative` (default), `balanced`, or `aggressive`. It sets `rsi_overbought` (70/65/60), `bb_sell_threshold` and `bb_sell_all_threshold`.
   - There are several backtest flavors: per-symbol `run_single_backtest` / `run_multi_stock_backtest`, `run_portfolio_backtest` (equal capital per stock), `run_true_portfolio_backtest` (one shared capital pool, invested dynamically in symbols that signal), and `run_comprehensive_analysis`.
-  - Outputs go to `output_files/{results,charts,reports}/`, resolved relative to the script file. Everything under `output_files/` is gitignored. `setup_korean_font()` configures matplotlib so Korean chart labels render.
+  - Outputs go to `output_files/{results,charts,reports}/`, under the project root. Everything under `output_files/` is gitignored. `setup_korean_font()` configures matplotlib so Korean chart labels render.
 - `realtime_monitor.py` → `RealTimeVolatilityMonitor`. It runs these concurrently:
   - a daemon thread for the scan loop (`_auto_monitoring_loop`), which scans only during US market hours. Hours are computed in `US/Eastern` from KST, with a simple holiday check. Every 5 scans it sends a status summary.
   - a daemon thread for the `python-telegram-bot` (v22, async) polling loop, on its own asyncio event loop, with `stop_signals=None`. It handles the `/start`, `/ticker <SYM>` and `/status` commands.

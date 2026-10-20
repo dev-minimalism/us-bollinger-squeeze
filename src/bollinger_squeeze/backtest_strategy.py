@@ -21,6 +21,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from .paths import OUTPUT_DIR, PROJECT_ROOT
+
 warnings.filterwarnings('ignore')
 
 
@@ -162,10 +164,10 @@ class VolatilityBollingerBacktest:
 
   def _setup_output_directories(self):
     """출력 디렉토리 설정 및 생성"""
-    # 현재 스크립트의 절대 경로 기준으로 출력 디렉토리 설정
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # 프로젝트 루트 기준으로 출력 디렉토리 설정
+    base_dir = PROJECT_ROOT
 
-    self.output_base_dir = os.path.join(base_dir, 'output_files')
+    self.output_base_dir = OUTPUT_DIR
     self.results_dir = os.path.join(self.output_base_dir, 'results')
     self.charts_dir = os.path.join(self.output_base_dir, 'charts')
     self.reports_dir = os.path.join(self.output_base_dir, 'reports')

@@ -1,19 +1,24 @@
+#!/bin/bash
 # ===================================================================================
 # 3. status_monitor.sh - 백그라운드 모니터링 상태 확인 스크립트
 # ===================================================================================
 
-#!/bin/bash
 # status_monitor.sh
 
 echo "📊 변동성 폭파 모니터링 상태"
 echo "========================"
+
+# 프로젝트 루트로 이동
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 # PID 파일 경로
 PID_FILE="output_files/monitor.pid"
 
 if [ ! -f "$PID_FILE" ]; then
     echo "❌ 모니터링이 실행되지 않고 있습니다."
-    echo "🚀 시작하려면: ./start_monitor.sh"
+    echo "🚀 시작하려면: ./scripts/start_monitor.sh"
     exit 1
 fi
 
@@ -62,5 +67,5 @@ if ps -p "$PID" > /dev/null 2>&1; then
 else
     echo "❌ PID $PID 프로세스가 실행되지 않고 있습니다."
     rm -f "$PID_FILE"
-    echo "🚀 시작하려면: ./start_monitor.sh"
+    echo "🚀 시작하려면: ./scripts/start_monitor.sh"
 fi
