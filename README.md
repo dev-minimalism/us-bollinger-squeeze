@@ -1,3 +1,9 @@
+[![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![yfinance](https://img.shields.io/badge/yfinance-410093)](https://pypi.org/project/yfinance/)
+[![Backtrader](https://img.shields.io/badge/Backtrader-4B8BBE)](https://www.backtrader.com)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/bots)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 # 변동성 폭파 볼린저 밴드 트레이딩 시스템
 
 변동성 압축(Bollinger Squeeze) 후 폭파를 노리는 볼린저 밴드 기반 백테스트 및 실시간 알림 시스템입니다. 미국 시총 상위 50개 종목을 대상으로 하며, 데이터는 Yahoo Finance(`yfinance`)에서 가져옵니다.
