@@ -108,9 +108,6 @@ def setup_korean_font():
     # 마이너스 기호 깨짐 방지
     plt.rcParams['axes.unicode_minus'] = False
 
-    # 폰트 캐시 갱신
-    fm._rebuild()
-
     return font_found
 
   except Exception as e:
