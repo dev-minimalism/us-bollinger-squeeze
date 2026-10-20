@@ -3,7 +3,7 @@
 
 - 스퀴즈: 밴드폭이 최근 20일 최소값의 1.1배 미만
 - 매수: 전일 스퀴즈 + 종가 상단밴드 돌파 + 거래량 증가 + RSI 범위 내
-- 50% 익절: BB 위치가 익절 기준 이상
+- 50% 익절: BB 위치가 익절 기준 이상이었다가 아래로 내려올 때 (상승 모멘텀 둔화)
 - 전량 매도: BB 위치가 전량 매도 기준 이하 또는 RSI < 30
 """
 
@@ -102,7 +102,12 @@ def calculate_indicators(data: pd.DataFrame,
       (data['RSI'] < params['rsi_upper'])
   )
 
-  data['Sell_50_Signal'] = data['BB_Position'] >= params['bb_sell_threshold']
+  # 50% 익절: 익절 기준 위에 있다가 아래로 내려온 봉
+  # (돌파 직후에는 BB 위치가 1을 넘어 '기준 이상' 조건이 바로 성립하므로, 하향 돌파로 판단)
+  bb_sell = params['bb_sell_threshold']
+  data['Sell_50_Signal'] = (
+      (data['BB_Position'].shift(1) >= bb_sell) & (data['BB_Position'] < bb_sell)
+  )
   data['Sell_All_Signal'] = (
       (data['BB_Position'] <= params['bb_sell_all_threshold']) |
       (data['RSI'] < RSI_STOP_LOSS)

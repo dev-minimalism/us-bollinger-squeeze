@@ -369,7 +369,7 @@ class RealTimeVolatilityMonitor:
         f"💡 <b>Strategy Notes:</b>\n"
         f"• Buy: squeeze → close above upper band + volume {params['volume_threshold']}x"
         f" + RSI {params['rsi_lower']}~{params['rsi_upper']}\n"
-        f"• Take 50% profit at BB position ≥ {params['bb_sell_threshold']}\n"
+        f"• Take 50% profit when BB position falls back below {params['bb_sell_threshold']}\n"
         f"• Exit remaining at BB position ≤ {params['bb_sell_all_threshold']} or RSI < {strategy.RSI_STOP_LOSS}"
       )
 
