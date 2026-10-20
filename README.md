@@ -1,189 +1,160 @@
-# requirements.txt
-yfinance>=0.2.18
-pandas>=2.0.0
-numpy>=1.24.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-requests>=2.31.0
-schedule>=1.2.0
-
-# setup.py
-from setuptools import setup, find_packages
-
-setup(
-name="volatility-bollinger-trading",
-version="1.0.0",
-description="변동성 폭파 볼린저 밴드 트레이딩 시스템",
-author="Your Name",
-packages=find_packages(),
-install_requires=[
-"yfinance>=0.2.18",
-"pandas>=2.0.0",
-"numpy>=1.24.0",
-"matplotlib>=3.7.0",
-"seaborn>=0.12.0",
-"requests>=2.31.0",
-"schedule>=1.2.0"
-],
-python_requires=">=3.8",
-entry_points={
-"console_scripts": [
-"volatility-trading=main:main",
-],
-},
-)
-
-# README.md
 # 변동성 폭파 볼린저 밴드 트레이딩 시스템
 
-변동성 압축 후 폭파를 노리는 볼린저 밴드 기반 자동 트레이딩 시스템입니다.
+변동성 압축(Bollinger Squeeze) 후 폭파를 노리는 볼린저 밴드 기반 백테스트 및 실시간 알림 시스템입니다. 미국 시총 상위 50개 종목을 대상으로 하며, 데이터는 Yahoo Finance(`yfinance`)에서 가져옵니다.
 
 ## 🚀 주요 기능
 
 ### 1. 변동성 폭파 전략
-- 볼린저 밴드폭이 최근 50일 중 하위 20% 이하일 때 변동성 압축 감지
-- RSI > 70 + 변동성 압축 시 매수 신호
-- 분할 익절: 50% → 나머지 50%
+- 볼린저 밴드폭이 최근 50일 중 하위 20% 이하일 때 변동성 압축으로 판단
+- RSI 과매수 + 변동성 압축 시 매수 신호
+- 분할 익절: 50% 익절 → 나머지 전량 매도
 
-### 2. 백테스트 모듈 (`backtest_strategy.py`)
-- 미국 시총 50위 종목 자동 분석
-- 상세한 성과 지표 (수익률, 승률, 손익비, 최대낙폭 등)
-- 시각화 차트 생성
-- CSV 결과 저장
+### 2. 백테스트 (`backtest_strategy.py`)
+- 전략 모드 3종: 보수적 / 균형 / 공격적
+- 백테스트 유형: 개별 종목 분석, 균등 배분 포트폴리오, 통합 포트폴리오(동적 자금 관리)
+- 성과 지표(수익률, 승률, 손익비, 최대낙폭 등), 차트, CSV, 리포트 생성
 
 ### 3. 실시간 모니터링 (`realtime_monitor.py`)
-- 실시간 신호 감지 및 알림
-- 텔레그램 자동 알림
-- 중복 알림 방지 (쿨다운 시스템)
-- 로깅 시스템
+- 미국 정규장 시간(한국 시간 기준 자동 변환, 주말/공휴일 제외)에만 스캔
+- 신호 발생 시 텔레그램 알림 (종목 한글명 포함)
+- 종목·신호별 1시간 쿨다운으로 중복 알림 방지
+- 1시간마다 Heartbeat, 5회 스캔마다 상태 요약 전송
+- 텔레그램 봇 명령어: `/ticker <심볼>`, `/status`, `/start`
 
-## 📦 설치 방법
+## 📦 설치
 
-### 1. 필수 라이브러리 설치
 ```bash
+git clone git@github.com:dev-minimalism/us-bollinger-squeeze.git
+cd us-bollinger-squeeze
+
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 파일 구조
+### 파일 구조
 ```
-trading_system/
-├── main.py                    # 메인 실행 파일
-├── backtest_strategy.py       # 백테스트 모듈
-├── realtime_monitor.py        # 실시간 모니터링 모듈
-├── requirements.txt           # 필수 라이브러리
-└── README.md                  # 이 파일
+us-bollinger-squeeze/
+├── main.py                 # CLI 진입점
+├── backtest_strategy.py    # 백테스트 모듈
+├── realtime_monitor.py     # 실시간 모니터링 + 텔레그램 봇
+├── start_monitor.sh        # 백그라운드 모니터링 시작
+├── stop_monitor.sh         # 중지
+├── restart_monitor.sh      # 재시작
+├── status_monitor.sh       # 상태 확인 (PID, 메모리, CPU)
+├── view_logs.sh            # 로그 보기
+├── install_service.sh      # systemd 서비스 등록 (Linux)
+└── output_files/           # 결과·차트·리포트·로그 (자동 생성, git 제외)
 ```
 
 ## 🔧 사용 방법
 
-### 기본 실행
+### 실행 모드
+
 ```bash
-# 백테스트만 실행
-python main.py --mode backtest
-
-# 실시간 모니터링만 실행  
-python main.py --mode monitor
-
-# 백테스트 후 모니터링 (기본값)
-python main.py --mode both
+python main.py --mode backtest         # 백테스트 (대화형)
+python main.py --mode monitor          # 실시간 모니터링 (대화형)
+python main.py --mode monitor-default  # 백그라운드용 모니터링 (기본 설정, 입력 없음)
+python main.py --mode both             # 백테스트 후 모니터링 (기본값)
 ```
+
+`backtest` 모드는 아래 항목을 차례로 입력받습니다.
+- 초기 자금: $10,000 / $50,000 / $100,000 / 사용자 정의
+- 전략 모드: 보수적 / 균형 / 공격적
+- 종목 수: 10 / 20 / 30 / 50
+- 백테스트 기간
+- 백테스트 유형: 개별 / 균등 배분 포트폴리오 / 통합 포트폴리오 / 개별 + 통합
 
 ### 텔레그램 알림 설정
 
-1. **봇 생성**: @BotFather에서 새 봇 생성
-2. **토큰 획득**: 봇 토큰 복사
-3. **채팅 ID 확인**: @userinfobot에서 chat_id 확인
-4. **환경변수 설정**:
+1. [@BotFather](https://t.me/BotFather)에서 봇을 만들고 토큰을 복사합니다.
+2. [@userinfobot](https://t.me/userinfobot)에서 chat_id를 확인합니다.
+3. 환경변수를 설정합니다.
    ```bash
-   export TELEGRAM_BOT_TOKEN="your_bot_token_here"
-   export TELEGRAM_CHAT_ID="your_chat_id_here"
+   export US_BOLLINGER_TELEGRAM_BOT_TOKEN="your_bot_token_here"
+   export US_BOLLINGER_TELEGRAM_CHAT_ID="your_chat_id_here"
    ```
 
-### 개별 모듈 사용
+토큰이 없어도 모니터링은 동작하며, 알림 대신 로그만 남깁니다.
 
-#### 백테스트만 실행
+#### 봇 명령어
+| 명령어 | 설명 |
+|---|---|
+| `/ticker AAPL` | 개별 종목 분석 (대소문자 무관) |
+| `/status` | 모니터링 상태 확인 |
+| `/start` | 도움말 |
+
+### 백그라운드 실행
+
+```bash
+./start_monitor.sh     # nohup으로 monitor-default 실행, PID는 output_files/monitor.pid
+./status_monitor.sh    # 실행 상태 확인
+./view_logs.sh         # 로그 보기
+./restart_monitor.sh   # 재시작
+./stop_monitor.sh      # 중지
+```
+
+systemd 서비스로 등록하려면 (Linux):
+```bash
+./install_service.sh
+sudo systemctl start volatility-monitor
+```
+
+### 로그 위치
+- `monitor-default` 모드: `output_files/logs/monitor_YYYYMMDD.log`
+- `monitor` / `both` 모드: 실행 디렉토리의 `trading_monitor.log`
+- `start_monitor.sh`의 표준 출력: `output_files/logs/nohup.out`
+
+### 모듈 직접 사용
+
 ```python
 from backtest_strategy import VolatilityBollingerBacktest
 
-backtest = VolatilityBollingerBacktest()
-results = backtest.run_multi_stock_backtest("2022-01-01", "2024-01-01")
-print(results)
+backtest = VolatilityBollingerBacktest(initial_capital=10000, strategy_mode="balanced")
+results = backtest.run_multi_stock_backtest("2022-01-01", "2024-01-01", max_stocks=20)
+portfolio = backtest.run_true_portfolio_backtest("2022-01-01", "2024-01-01")
 ```
 
-#### 실시간 모니터링만 실행
 ```python
+import os
 from realtime_monitor import RealTimeVolatilityMonitor
 
 monitor = RealTimeVolatilityMonitor(
-    telegram_bot_token="your_token",
-    telegram_chat_id="your_chat_id"
+    telegram_bot_token=os.getenv("US_BOLLINGER_TELEGRAM_BOT_TOKEN"),
+    telegram_chat_id=os.getenv("US_BOLLINGER_TELEGRAM_CHAT_ID"),
 )
-monitor.start_monitoring(scan_interval=300)  # 5분 간격
+monitor.run_continuous_monitoring(scan_interval=300)  # 5분 간격
 ```
 
 ## 📊 매매 전략 상세
 
-### 매수 조건
-- RSI > 70 (과매수 구간)
-- 변동성 압축 상태 (밴드폭 < 최근 50일 중 20% 하위)
-
-### 매도 조건
-- **50% 익절**: 볼린저밴드 80% 이상 위치 OR 중앙선 근처
-- **나머지 매도**: 볼린저밴드 하단 (10% 이하) 터치
-
 ### 기술적 지표
 - 볼린저 밴드: 20일, 2σ
-- RSI: 14일
-- 변동성 지표: 50일 롤링 윈도우
+- RSI: 14일 (단순 이동평균 방식)
+- 변동성 압축: 밴드폭 < 최근 50일 밴드폭의 하위 20% 분위수
+- BB 위치: (종가 − 하단) / (상단 − 하단), 0~1
 
-## 📈 백테스트 결과 예시
+### 매수 / 매도 조건
+- **매수**: RSI > 기준값 AND 변동성 압축
+- **50% 익절**: BB 위치 ≥ 익절 기준 OR 중앙선 근처(|BB 위치 − 0.5| ≤ 0.1)
+- **전량 매도**: BB 위치 ≤ 전량 매도 기준
 
-```
-Symbol  Total_Return(%)  Win_Rate(%)  Total_Trades  Profit_Factor  Max_Drawdown(%)
-AAPL           15.23         68.5           24          2.1            8.4
-MSFT           12.67         71.2           19          1.9            6.2
-NVDA           28.91         64.3           31          2.8           15.1
-```
+### 전략 모드 (백테스트)
 
-## ⚠️ 주의사항
+| 모드 | RSI 매수 기준 | 50% 익절 BB 위치 | 전량 매도 BB 위치 |
+|---|---|---|---|
+| 보수적 (conservative) | 70 | 0.80 | 0.10 |
+| 균형 (balanced) | 65 | 0.75 | 0.15 |
+| 공격적 (aggressive) | 60 | 0.70 | 0.20 |
 
-1. **투자 위험**: 이 시스템은 교육 목적으로 제작되었습니다
-2. **실전 적용**: 충분한 검증 후 소액으로 시작하세요
-3. **시장 변동성**: 시장 상황에 따라 전략 효과가 달라질 수 있습니다
-4. **데이터 지연**: Yahoo Finance 데이터는 15-20분 지연될 수 있습니다
-5. **API 제한**: 과도한 요청시 일시적 차단 가능
-
-## 🛠️ 설정 커스터마이징
-
-### 백테스트 설정 변경
-```python
-# backtest_strategy.py에서 수정
-class VolatilityBollingerBacktest:
-    def __init__(self):
-        self.bb_period = 20              # 볼린저 밴드 기간
-        self.bb_std_multiplier = 2.0     # 표준편차 배수
-        self.rsi_period = 14             # RSI 기간
-        self.rsi_overbought = 70         # RSI 과매수 임계값
-        self.volatility_lookback = 50    # 변동성 확인 기간
-        self.volatility_threshold = 0.2  # 변동성 압축 임계값
-```
-
-### 모니터링 설정 변경
-```python
-# realtime_monitor.py에서 수정
-class RealTimeVolatilityMonitor:
-    def __init__(self):
-        self.watchlist = ['AAPL', 'MSFT', ...]  # 감시 종목
-        self.alert_cooldown = 3600               # 알림 쿨다운 (초)
-```
+> 실시간 모니터링은 보수적 모드 기준값(70 / 0.8 / 0.1)으로 고정되어 있습니다.
 
 ## 📱 텔레그램 알림 예시
 
-### 매수 신호
 ```
 🚀 매수 신호 발생!
 
-종목: AAPL
+종목: AAPL (애플)
 현재가: $150.25
 RSI: 72.3
 BB 위치: 0.15
@@ -193,11 +164,10 @@ BB 위치: 0.15
 ⚡ 변동성 폭파 예상 구간입니다!
 ```
 
-### 익절 신호
 ```
 💡 50% 익절 신호!
 
-종목: AAPL
+종목: AAPL (애플)
 현재가: $158.75
 BB 위치: 0.85
 시간: 2024-01-16 10:15:00
@@ -205,46 +175,26 @@ BB 위치: 0.85
 📈 목표 수익구간에 도달했습니다.
 ```
 
-## 🔍 문제 해결
+```
+🔴 전량 매도 신호!
 
-### 1. 모듈 import 오류
-```bash
-# 파일이 같은 디렉토리에 있는지 확인
-ls -la *.py
+종목: AAPL (애플)
+현재가: $145.10
+BB 위치: 0.08
+시간: 2024-01-20 11:00:00
 
-# Python 경로 확인
-python -c "import sys; print(sys.path)"
+⚠️ 손절 또는 나머지 익절 시점입니다.
 ```
 
-### 2. 데이터 다운로드 실패
-```python
-# yfinance 업데이트
-pip install --upgrade yfinance
+## 🛠️ 설정 커스터마이징
 
-# 네트워크 연결 확인
-import yfinance as yf
-stock = yf.Ticker("AAPL")
-print(stock.history(period="5d"))
-```
+- 백테스트 대상 종목: `VolatilityBollingerBacktest.top50_stocks`
+- 백테스트 지표 및 전략 기준값: `VolatilityBollingerBacktest._setup_parameters()`
+- 모니터링 대상 종목: `RealTimeVolatilityMonitor.watchlist`
+- 종목 한글명: `RealTimeVolatilityMonitor.ticker_to_korean`
+- 알림 쿨다운 / Heartbeat 간격: `alert_cooldown`, `heartbeat_interval` (기본 3600초)
 
-### 3. 텔레그램 알림 실패
-```python
-# 봇 토큰과 채팅 ID 확인
-monitor.test_telegram_connection()
-
-# 수동으로 테스트
-import requests
-url = f"https://api.telegram.org/bot{TOKEN}/getMe"
-print(requests.get(url).json())
-```
-
-### 4. 메모리 부족
-```python
-# 백테스트 종목 수 줄이기
-results = backtest.run_multi_stock_backtest(
-    start_date, end_date, max_stocks=10  # 기본 20에서 10으로
-)
-```
+신호 계산 로직은 `backtest_strategy.py`와 `realtime_monitor.py`에 각각 구현되어 있으므로, 전략을 바꿀 때는 두 파일을 함께 수정해야 합니다.
 
 ## 📊 성과 지표 설명
 
@@ -254,37 +204,35 @@ results = backtest.run_multi_stock_backtest(
 - **Max_Drawdown(%)**: 최대 낙폭 (고점 대비 최대 하락률)
 - **Avg_Profit/Loss(%)**: 평균 수익/손실률
 
-## 🔄 버전 히스토리
+## 🔍 문제 해결
 
-### v1.0.0 (2024-01-01)
-- 초기 릴리즈
-- 백테스트 모듈 구현
-- 실시간 모니터링 모듈 구현
-- 텔레그램 알림 기능
-- 미국 시총 50위 종목 지원
+### 데이터 다운로드 실패
+```bash
+pip install --upgrade yfinance
+python -c "import yfinance as yf; print(yf.Ticker('AAPL').history(period='5d'))"
+```
 
-## 🤝 기여하기
+### 텔레그램 알림이 오지 않음
+- 환경변수 이름이 `US_BOLLINGER_TELEGRAM_BOT_TOKEN` / `US_BOLLINGER_TELEGRAM_CHAT_ID`인지 확인하세요.
+- 토큰 확인:
+  ```bash
+  curl "https://api.telegram.org/bot${US_BOLLINGER_TELEGRAM_BOT_TOKEN}/getMe"
+  ```
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+### 백테스트가 너무 오래 걸림
+종목 수를 10~20개로 줄여서 실행하세요.
 
-## 📄 라이선스
+## ⚠️ 주의사항
 
-이 프로젝트는 MIT 라이선스 하에 배포됩니다.
+1. **데이터 지연**: Yahoo Finance 데이터는 15~20분 지연될 수 있습니다.
+2. **API 제한**: 요청이 많으면 일시적으로 차단될 수 있습니다.
+3. **공휴일**: 미국 공휴일은 주요 휴일만 간단히 처리합니다.
+4. **실전 적용**: 충분히 검증한 뒤 소액으로 시작하세요.
 
 ## ⚖️ 면책조항
 
 본 소프트웨어는 교육 및 연구 목적으로만 제공됩니다. 실제 투자에 사용하여 발생하는 손실에 대해 개발자는 책임지지 않습니다. 투자는 본인의 책임 하에 신중하게 결정하시기 바랍니다.
 
-## 📞 지원
+## 📄 라이선스
 
-- 문제 신고: GitHub Issues
-- 기능 요청: GitHub Discussions
-- 이메일: your.email@example.com
-
----
-
-**Happy Trading! 🚀📈**
+[MIT License](LICENSE)

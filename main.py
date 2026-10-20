@@ -8,8 +8,8 @@
     python main.py --mode both        # 백테스트 후 모니터링 실행 (기본값)
 
 텔레그램 설정:
-    export TELEGRAM_BOT_TOKEN="your_bot_token"
-    export TELEGRAM_CHAT_ID="your_chat_id"
+    export US_BOLLINGER_TELEGRAM_BOT_TOKEN="your_bot_token"
+    export US_BOLLINGER_TELEGRAM_CHAT_ID="your_chat_id"
 """
 
 import argparse
@@ -400,8 +400,8 @@ def run_monitor():
     print("   1. @BotFather에서 봇 생성 후 토큰 획득")
     print("   2. @userinfobot에서 chat_id 확인")
     print("   3. 환경변수 설정:")
-    print("      export TELEGRAM_BOT_TOKEN='your_bot_token'")
-    print("      export TELEGRAM_CHAT_ID='your_chat_id'")
+    print("      export US_BOLLINGER_TELEGRAM_BOT_TOKEN='your_bot_token'")
+    print("      export US_BOLLINGER_TELEGRAM_CHAT_ID='your_chat_id'")
     print("\n❌ 텔레그램 설정 없이는 모니터링을 실행할 수 없습니다.")
     return
   else:
@@ -486,8 +486,8 @@ def main():
     2. 봇 토큰 획득
     3. @userinfobot에서 chat_id 확인
     4. 환경변수 설정:
-       export TELEGRAM_BOT_TOKEN="your_bot_token"
-       export TELEGRAM_CHAT_ID="your_chat_id"
+       export US_BOLLINGER_TELEGRAM_BOT_TOKEN="your_bot_token"
+       export US_BOLLINGER_TELEGRAM_CHAT_ID="your_chat_id"
 
 🎯 전략 개요:
     - 변동성 압축 감지 (밴드폭 < 최근 50일 중 20% 하위)
