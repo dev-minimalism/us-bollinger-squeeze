@@ -344,6 +344,7 @@ class VolatilityBollingerBacktest:
           'shares': shares,
           'value': cash
         })
+        cash = 0  # 전액 투자
 
       # 50% 익절
       elif data.iloc[i]['Sell_50_Signal'] and position == 2:
@@ -613,6 +614,7 @@ class VolatilityBollingerBacktest:
     # 통합 포트폴리오 상태
     total_cash = self.initial_capital
     holdings = {}  # {symbol: shares}
+    half_sold = set()  # 50% 익절을 이미 한 종목 (익절은 포지션당 한 번)
     portfolio_history = []
     all_trades = []
     max_positions = 10  # 최대 동시 보유 종목 수
@@ -662,11 +664,13 @@ class VolatilityBollingerBacktest:
         current_price = signal['price']
 
         # 50% 매도
-        if signal['sell_50_signal'] and current_shares > 0:
+        if (signal['sell_50_signal'] and current_shares > 0
+            and symbol not in half_sold):
           sell_shares = current_shares * 0.5
           sell_value = sell_shares * current_price
           total_cash += sell_value
           holdings[symbol] = current_shares - sell_shares
+          half_sold.add(symbol)
 
           trade = {
             'date': date,
@@ -694,6 +698,7 @@ class VolatilityBollingerBacktest:
           all_trades.append(trade)
 
           del holdings[symbol]  # 포지션 완전 삭제
+          half_sold.discard(symbol)
 
       # 3. 매수 신호 처리 (RSI 순으로 우선순위)
       buy_candidates = [s for s in daily_signals if
