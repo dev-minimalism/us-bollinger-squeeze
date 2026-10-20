@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from . import strategy
 from .paths import OUTPUT_DIR, PROJECT_ROOT
 
 warnings.filterwarnings('ignore')
@@ -186,78 +187,27 @@ class VolatilityBollingerBacktest:
           self.reports_dir = base_dir
 
   def _setup_parameters(self, strategy_mode: str):
-    """전략 매개변수 설정 (모드별)"""
-    self.bb_period = 20
-    self.bb_std_multiplier = 2.0
-    self.rsi_period = 14
-    self.volatility_lookback = 50
-    self.volatility_threshold = 0.2
+    """전략 매개변수 설정 (모드별 기준값은 strategy.STRATEGY_PARAMS)"""
+    self.bb_period = strategy.BB_PERIOD
+    self.bb_std_multiplier = strategy.BB_STD_MULTIPLIER
+    self.rsi_period = strategy.RSI_PERIOD
+    self.min_data_length = strategy.MIN_DATA_LENGTH
+    self.strategy_params = strategy.get_strategy_params(strategy_mode)
 
     if strategy_mode == "aggressive":
-      # 공격적 전략: 더 많은 매매 기회
-      self.rsi_overbought = 60  # 낮춤 (더 빨리 매수)
-      self.bb_sell_threshold = 0.7  # 낮춤 (더 빨리 50% 익절)
-      self.bb_sell_all_threshold = 0.2  # 높임 (덜 빨리 전량 매도)
-      print("🔥 공격적 전략: 더 많은 매매 기회, 높은 수익 추구")
-
+      print("🔥 공격적 전략: 빠른 브레이크아웃 감지")
     elif strategy_mode == "balanced":
-      # 균형 전략: 적당한 매매
-      self.rsi_overbought = 65
-      self.bb_sell_threshold = 0.75
-      self.bb_sell_all_threshold = 0.15
-      print("⚖️ 균형 전략: 적당한 위험과 수익")
-
+      print("⚖️ 균형 전략: 안정적 브레이크아웃 확인")
     else:  # conservative
-      # 보수적 전략: 기존 설정
-      self.rsi_overbought = 70
-      self.bb_sell_threshold = 0.8
-      self.bb_sell_all_threshold = 0.1
-      print("🛡️ 보수적 전략: 안전 우선, 신중한 매매")
+      print("🛡️ 보수적 전략: 강한 브레이크아웃만 포착")
 
   # ===================================================================================
   # 기술적 지표 계산
   # ===================================================================================
 
   def calculate_technical_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-    """기술적 지표 계산"""
-    if len(data) < max(self.bb_period, self.rsi_period,
-                       self.volatility_lookback):
-      return data
-
-    # 볼린저 밴드
-    data['SMA'] = data['Close'].rolling(window=self.bb_period).mean()
-    data['STD'] = data['Close'].rolling(window=self.bb_period).std()
-    data['Upper_Band'] = data['SMA'] + (data['STD'] * self.bb_std_multiplier)
-    data['Lower_Band'] = data['SMA'] - (data['STD'] * self.bb_std_multiplier)
-
-    # 밴드폭 (변동성 지표)
-    data['Band_Width'] = (data['Upper_Band'] - data['Lower_Band']) / data['SMA']
-
-    # 변동성 압축 신호
-    data['Volatility_Squeeze'] = (
-        data['Band_Width'] < data['Band_Width'].rolling(
-        self.volatility_lookback).quantile(self.volatility_threshold)
-    )
-
-    # 볼린저 밴드 위치 (0~1)
-    data['BB_Position'] = (data['Close'] - data['Lower_Band']) / (
-        data['Upper_Band'] - data['Lower_Band'])
-
-    # RSI
-    delta = data['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=self.rsi_period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=self.rsi_period).mean()
-    rs = gain / loss
-    data['RSI'] = 100 - (100 / (1 + rs))
-
-    # 매매 신호 생성 (개선된 버전)
-    data['Buy_Signal'] = (data['RSI'] > self.rsi_overbought) & (
-      data['Volatility_Squeeze'])
-    data['Sell_50_Signal'] = (data['BB_Position'] >= self.bb_sell_threshold) | (
-        abs(data['BB_Position'] - 0.5) <= 0.1)
-    data['Sell_All_Signal'] = data['BB_Position'] <= self.bb_sell_all_threshold
-
-    return data
+    """기술적 지표 및 매매 신호 계산"""
+    return strategy.calculate_indicators(data, self.strategy_params)
 
   # ===================================================================================
   # 백테스트 실행
@@ -277,8 +227,8 @@ class VolatilityBollingerBacktest:
         print(f"❌ {symbol}: 데이터 없음", end="")
         return None
 
-      if len(data) < self.volatility_lookback:
-        print(f"❌ {symbol}: 데이터 부족 ({len(data)}일 < {self.volatility_lookback}일)", end="")
+      if len(data) < self.min_data_length:
+        print(f"❌ {symbol}: 데이터 부족 ({len(data)}일 < {self.min_data_length}일)", end="")
         return None
 
       # 데이터 품질 검증
@@ -534,7 +484,7 @@ class VolatilityBollingerBacktest:
           stock = yf.Ticker(symbol)
           data = stock.history(start=start_date, end=end_date, auto_adjust=True)
 
-          if data.empty or len(data) < self.volatility_lookback:
+          if data.empty or len(data) < self.min_data_length:
             if retry_count == 0:
               print("데이터 부족", end="")
             break
@@ -918,7 +868,7 @@ class VolatilityBollingerBacktest:
         stock = yf.Ticker(symbol)
         data = stock.history(start=start_date, end=end_date)
 
-        if data.empty or len(data) < self.volatility_lookback:
+        if data.empty or len(data) < self.min_data_length:
           print("실패 (데이터 부족)")
           continue
 
@@ -1947,8 +1897,10 @@ class VolatilityBollingerBacktest:
 
 📊 사용된 전략 파라미터:
    • 볼린저 밴드: {self.bb_period}일, {self.bb_std_multiplier}σ
-   • RSI 임계값: {self.rsi_overbought}
-   • 변동성 압축: 하위 {self.volatility_threshold * 100}%
+   • 매수 RSI 범위: {self.strategy_params['rsi_lower']} ~ {self.strategy_params['rsi_upper']}
+   • 거래량 기준: 20일 평균의 {self.strategy_params['volume_threshold']}배 초과
+   • 변동성 압축: 밴드폭 < 최근 {strategy.SQUEEZE_LOOKBACK}일 최소값 × {strategy.SQUEEZE_TOLERANCE}
+   • 50% 익절 / 전량 매도 BB 위치: {self.strategy_params['bb_sell_threshold']} / {self.strategy_params['bb_sell_all_threshold']}
 
 📞 추가 정보: 더 상세한 분석이 필요하시면 상세 모드를 실행하세요
 {'=' * 60}

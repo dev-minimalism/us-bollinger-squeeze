@@ -13,3 +13,6 @@ def monitor_log_path() -> str:
   """오늘 날짜의 모니터링 로그 파일 경로 (디렉토리 자동 생성)"""
   os.makedirs(LOG_DIR, exist_ok=True)
   return os.path.join(LOG_DIR, f"monitor_{datetime.now().strftime('%Y%m%d')}.log")
+
+
+POSITIONS_FILE = os.path.join(OUTPUT_DIR, 'positions.json')

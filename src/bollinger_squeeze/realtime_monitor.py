@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -23,20 +24,23 @@ import requests
 import yfinance as yf
 from telegram.ext import Application, CommandHandler
 
-from .paths import monitor_log_path
+from . import strategy
+from .paths import POSITIONS_FILE, monitor_log_path
 
 warnings.filterwarnings('ignore')
 
 
 class RealTimeVolatilityMonitor:
   def __init__(self, telegram_bot_token: str = None,
-      telegram_chat_id: str = None):
+      telegram_chat_id: str = None,
+      strategy_mode: str = strategy.DEFAULT_STRATEGY_MODE):
     """
     실시간 변동성 폭파 볼린저 밴드 모니터링 시스템 (Heartbeat 기능 포함)
 
     Parameters:
     telegram_bot_token: 텔레그램 봇 토큰
     telegram_chat_id: 텔레그램 채팅 ID
+    strategy_mode: 전략 모드 (aggressive / balanced / conservative)
     """
     self.telegram_bot_token = telegram_bot_token
     self.telegram_chat_id = telegram_chat_id
@@ -105,13 +109,9 @@ class RealTimeVolatilityMonitor:
       'INTC', 'VZ', 'WFC', 'COP', 'BMY', 'NOW', 'CAT', 'NEE', 'UPS', 'RTX'
     ]
 
-    # 기술적 지표 설정
-    self.bb_period = 20
-    self.bb_std_multiplier = 2.0
-    self.rsi_period = 14
-    self.rsi_overbought = 70
-    self.volatility_lookback = 50
-    self.volatility_threshold = 0.2
+    # 전략 설정 (백테스트와 동일한 strategy 모듈 사용)
+    self.strategy_mode = strategy_mode
+    self.strategy_params = strategy.get_strategy_params(strategy_mode)
 
     # 알림 설정
     self.last_alerts = {}  # 중복 알림 방지
@@ -136,6 +136,11 @@ class RealTimeVolatilityMonitor:
         ]
     )
     self.logger = logging.getLogger(__name__)
+
+    # 종목별 포지션 상태 (재시작해도 유지되도록 파일에 저장)
+    # {symbol: {'status': 'full'|'half', 'entry_price': float,
+    #           'entry_date': str, 'last_action_date': str}}
+    self.positions = self._load_positions()
 
     # 모니터링 상태
     self.is_monitoring = False
@@ -289,6 +294,7 @@ class RealTimeVolatilityMonitor:
    🔍 Total Scans: {self.scan_count}
    📱 Alerts Sent: {self.total_signals_sent}
    📊 Watching: {len(self.watchlist)} stocks
+   📌 Positions: {len(self.positions)} held ({self.strategy_mode} mode)
    ⏰ Scan Interval: 5 minutes
    🎯 Last Signal: {last_signal_str}
 
@@ -318,6 +324,9 @@ class RealTimeVolatilityMonitor:
       buy_signal = signals['buy_signal']
       sell_50_signal = signals['sell_50_signal']
       sell_all_signal = signals['sell_all_signal']
+      params = self.strategy_params
+      position_labels = {'none': 'None', 'full': '🟢 Holding (100%)',
+                         'half': '🟡 Holding (50%)'}
 
       # RSI 상태 이모지
       if rsi >= 70:
@@ -352,13 +361,16 @@ class RealTimeVolatilityMonitor:
         f"💰 <b>Price:</b> ${price:.2f}\n"
         f"📊 <b>RSI:</b> {rsi:.1f} ({rsi_status})\n"
         f"📍 <b>BB Position:</b> {bb_pos:.2f} ({bb_status})\n"
-        f"🔥 <b>Volatility Squeeze:</b> {'✅ Active' if volatility_squeeze else '❌ Inactive'}\n\n"
+        f"🔥 <b>Volatility Squeeze:</b> {'✅ Active' if volatility_squeeze else '❌ Inactive'}\n"
+        f"📦 <b>Volume:</b> {signals['volume_ratio']:.1f}x 20-day avg\n"
+        f"📌 <b>Position:</b> {position_labels[signals['position_status']]}\n\n"
         f"🎯 <b>Signals:</b> {signals_text}\n\n"
         f"⏰ <b>Analysis Time:</b> {timestamp}\n\n"
         f"💡 <b>Strategy Notes:</b>\n"
-        f"• Buy when RSI > 70 + Volatility Squeeze\n"
-        f"• Take 50% profit at BB upper region\n"
-        f"• Exit remaining at BB lower region"
+        f"• Buy: squeeze → close above upper band + volume {params['volume_threshold']}x"
+        f" + RSI {params['rsi_lower']}~{params['rsi_upper']}\n"
+        f"• Take 50% profit at BB position ≥ {params['bb_sell_threshold']}\n"
+        f"• Exit remaining at BB position ≤ {params['bb_sell_all_threshold']} or RSI < {strategy.RSI_STOP_LOSS}"
       )
 
       return message
@@ -620,37 +632,80 @@ class RealTimeVolatilityMonitor:
       return None
 
   def calculate_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-    """기술적 지표 계산"""
-    if len(data) < max(self.bb_period, self.rsi_period,
-                       self.volatility_lookback):
-      return data
+    """기술적 지표 및 매매 신호 계산"""
+    return strategy.calculate_indicators(data, self.strategy_params)
 
-    data['SMA'] = data['Close'].rolling(window=self.bb_period).mean()
-    data['STD'] = data['Close'].rolling(window=self.bb_period).std()
-    data['Upper_Band'] = data['SMA'] + (data['STD'] * self.bb_std_multiplier)
-    data['Lower_Band'] = data['SMA'] - (data['STD'] * self.bb_std_multiplier)
+  # ===================================================================================
+  # 포지션 상태 관리
+  # ===================================================================================
 
-    data['Band_Width'] = (data['Upper_Band'] - data['Lower_Band']) / data['SMA']
-    data['Volatility_Squeeze'] = data['Band_Width'] < data[
-      'Band_Width'].rolling(self.volatility_lookback).quantile(
-        self.volatility_threshold)
+  def _load_positions(self) -> Dict:
+    """저장된 포지션 상태 로드"""
+    try:
+      with open(POSITIONS_FILE, encoding='utf-8') as f:
+        positions = json.load(f)
+      self.logger.info(f"📌 포지션 상태 로드: {len(positions)}개 종목 보유 중")
+      return positions
+    except FileNotFoundError:
+      return {}
+    except Exception as e:
+      self.logger.error(f"포지션 파일 로드 실패 ({POSITIONS_FILE}): {e}")
+      return {}
 
-    data['BB_Position'] = (data['Close'] - data['Lower_Band']) / (
-        data['Upper_Band'] - data['Lower_Band'])
+  def _save_positions(self):
+    """포지션 상태 저장"""
+    try:
+      os.makedirs(os.path.dirname(POSITIONS_FILE), exist_ok=True)
+      tmp_path = POSITIONS_FILE + '.tmp'
+      with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(self.positions, f, ensure_ascii=False, indent=2)
+      os.replace(tmp_path, POSITIONS_FILE)
+    except Exception as e:
+      self.logger.error(f"포지션 파일 저장 실패: {e}")
 
-    delta = data['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=self.rsi_period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=self.rsi_period).mean()
-    rs = gain / loss
-    data['RSI'] = 100 - (100 / (1 + rs))
+  def get_position_status(self, symbol: str) -> str:
+    """포지션 상태 조회: none / full / half"""
+    return self.positions.get(symbol, {}).get('status', 'none')
 
-    data['Buy_Signal'] = (data['RSI'] > self.rsi_overbought) & (
-      data['Volatility_Squeeze'])
-    data['Sell_50_Signal'] = (data['BB_Position'] >= 0.8) | (
-        abs(data['BB_Position'] - 0.5) <= 0.1)
-    data['Sell_All_Signal'] = data['BB_Position'] <= 0.1
+  def _decide_action(self, signals: Dict) -> Optional[str]:
+    """
+    포지션 상태에 따라 이번 봉에서 실행할 신호 결정 (백테스트와 동일한 규칙)
+    - 미보유: 매수만 / 전량 보유: 50% 익절 우선, 그다음 전량 매도 / 절반 보유: 전량 매도만
+    - 같은 일봉에서는 한 번만 행동 (매수 직후 같은 봉의 익절 신호 방지)
+    """
+    position = self.positions.get(signals['symbol'], {})
+    status = position.get('status', 'none')
 
-    return data
+    if position.get('last_action_date') == signals['bar_date']:
+      return None
+
+    if status == 'none':
+      return 'buy' if signals['buy_signal'] else None
+    if status == 'full' and signals['sell_50_signal']:
+      return 'sell_50'
+    if signals['sell_all_signal']:
+      return 'sell_all'
+    return None
+
+  def _apply_action(self, signals: Dict, action: str):
+    """포지션 상태 전이 후 저장"""
+    symbol = signals['symbol']
+    bar_date = signals['bar_date']
+
+    if action == 'buy':
+      self.positions[symbol] = {
+        'status': 'full',
+        'entry_price': signals['price'],
+        'entry_date': bar_date,
+        'last_action_date': bar_date,
+      }
+    elif action == 'sell_50':
+      self.positions[symbol]['status'] = 'half'
+      self.positions[symbol]['last_action_date'] = bar_date
+    elif action == 'sell_all':
+      self.positions.pop(symbol, None)
+
+    self._save_positions()
 
   def get_stock_data(self, symbol: str, period: str = "100d") -> Optional[
     pd.DataFrame]:
@@ -677,7 +732,7 @@ class RealTimeVolatilityMonitor:
     """신호 확인 (개선된 에러 처리)"""
     try:
       data = self.get_stock_data(symbol)
-      if data is None or len(data) < self.volatility_lookback:
+      if data is None or len(data) < strategy.MIN_DATA_LENGTH:
         self.logger.warning(f"Insufficient data for {symbol}")
         return {}
 
@@ -700,10 +755,13 @@ class RealTimeVolatilityMonitor:
         'bb_position': float(latest['BB_Position']),
         'band_width': float(latest['Band_Width']),
         'volatility_squeeze': bool(latest['Volatility_Squeeze']),
+        'volume_ratio': float(latest['Volume_Ratio']),
         'buy_signal': bool(latest['Buy_Signal']),
         'sell_50_signal': bool(latest['Sell_50_Signal']),
         'sell_all_signal': bool(latest['Sell_All_Signal']),
-        'timestamp': latest.name
+        'position_status': self.get_position_status(symbol),
+        'timestamp': latest.name,
+        'bar_date': latest.name.strftime('%Y-%m-%d')
       }
 
       return signals
@@ -724,7 +782,8 @@ class RealTimeVolatilityMonitor:
     self.last_alerts[key] = current_time
     return True
 
-  def format_alert_message(self, signals: Dict, signal_type: str) -> str:
+  def format_alert_message(self, signals: Dict, signal_type: str,
+      entry_price: float = None) -> str:
     """알림 메시지 포맷팅"""
     symbol = signals['symbol']
     korean_name = self.ticker_to_korean.get(symbol, 'Unknown')  # Get Korean name, default to 'Unknown' if not found
@@ -732,6 +791,10 @@ class RealTimeVolatilityMonitor:
     rsi = signals['rsi']
     bb_pos = signals['bb_position']
     timestamp = signals['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+    profit_line = ""
+    if entry_price:
+      profit_pct = (price - entry_price) / entry_price * 100
+      profit_line = f"\n매수가 대비: <b>{profit_pct:+.2f}%</b> (매수가 ${entry_price:.2f})"
 
     if signal_type == 'buy':
       message = f"""🚀 <b>매수 신호 발생!</b>
@@ -740,17 +803,17 @@ class RealTimeVolatilityMonitor:
 현재가: <b>${price:.2f}</b>
 RSI: <b>{rsi:.1f}</b>
 BB 위치: <b>{bb_pos:.2f}</b>
-변동성 압축: <b>활성</b>
+거래량: <b>20일 평균의 {signals['volume_ratio']:.1f}배</b>
 시간: {timestamp}
 
-⚡ 변동성 폭파 예상 구간입니다!"""
+⚡ 변동성 압축 후 상단 밴드 돌파!"""
 
     elif signal_type == 'sell_50':
       message = f"""💡 <b>50% 익절 신호!</b>
             
 종목: <b>{symbol} ({korean_name})</b>
 현재가: <b>${price:.2f}</b>
-BB 위치: <b>{bb_pos:.2f}</b>
+BB 위치: <b>{bb_pos:.2f}</b>{profit_line}
 시간: {timestamp}
 
 📈 목표 수익구간에 도달했습니다."""
@@ -761,6 +824,7 @@ BB 위치: <b>{bb_pos:.2f}</b>
 종목: <b>{symbol} ({korean_name})</b>
 현재가: <b>${price:.2f}</b>
 BB 위치: <b>{bb_pos:.2f}</b>
+RSI: <b>{rsi:.1f}</b>{profit_line}
 시간: {timestamp}
 
 ⚠️ 손절 또는 나머지 익절 시점입니다."""
@@ -771,39 +835,32 @@ BB 위치: <b>{bb_pos:.2f}</b>
     return message
 
   def process_signals(self, signals: Dict) -> bool:
-    """신호 처리 및 알림"""
+    """포지션 상태에 맞는 신호만 처리하고 알림 전송"""
     if not signals:
       return False
 
+    action = self._decide_action(signals)
+    if action is None:
+      return False
+
     symbol = signals['symbol']
-    alert_sent = False
+    entry_price = self.positions.get(symbol, {}).get('entry_price')
 
-    if signals['buy_signal'] and self.should_send_alert(symbol, 'buy'):
-      message = self.format_alert_message(signals, 'buy')
-      if self.send_telegram_alert(message):
-        self.logger.info(f"🚀 매수 신호 알림 전송: {symbol}")
-        self.total_signals_sent += 1
-        self.last_signal_time = datetime.now()
-        alert_sent = True
+    # 알림 전송 여부와 관계없이 전략상 포지션은 전이
+    self._apply_action(signals, action)
 
-    if signals['sell_50_signal'] and self.should_send_alert(symbol, 'sell_50'):
-      message = self.format_alert_message(signals, 'sell_50')
-      if self.send_telegram_alert(message):
-        self.logger.info(f"💡 50% 매도 신호 알림 전송: {symbol}")
-        self.total_signals_sent += 1
-        self.last_signal_time = datetime.now()
-        alert_sent = True
+    if not self.should_send_alert(symbol, action):
+      return False
 
-    if signals['sell_all_signal'] and self.should_send_alert(symbol,
-                                                             'sell_all'):
-      message = self.format_alert_message(signals, 'sell_all')
-      if self.send_telegram_alert(message):
-        self.logger.info(f"🔴 전량 매도 신호 알림 전송: {symbol}")
-        self.total_signals_sent += 1
-        self.last_signal_time = datetime.now()
-        alert_sent = True
+    message = self.format_alert_message(signals, action, entry_price)
+    if not self.send_telegram_alert(message):
+      return False
 
-    return alert_sent
+    log_labels = {'buy': '🚀 매수', 'sell_50': '💡 50% 매도', 'sell_all': '🔴 전량 매도'}
+    self.logger.info(f"{log_labels[action]} 신호 알림 전송: {symbol}")
+    self.total_signals_sent += 1
+    self.last_signal_time = datetime.now()
+    return True
 
   def scan_single_stock(self, symbol: str):
     """단일 종목 스캔"""

@@ -167,9 +167,9 @@ def run_backtest():
 
   # 투자 전략 선택
   print(f"\n📊 투자 전략을 선택하세요:")
-  print("1. 보수적 전략 (안전 우선, RSI 70)")
-  print("2. 균형 전략 (적당한 위험, RSI 65)")
-  print("3. 공격적 전략 (수익 추구, RSI 60)")
+  print("1. 보수적 전략 (강한 브레이크아웃만, RSI 55~70, 거래량 1.3배)")
+  print("2. 균형 전략 (표준, RSI 50~75, 거래량 1.2배)")
+  print("3. 공격적 전략 (빠른 진입, RSI 45~80, 거래량 1.1배)")
 
   try:
     strategy_choice = input("\n전략 선택 (1-3, 기본값: 2): ").strip() or "2"
@@ -490,9 +490,9 @@ def main():
        export US_BOLLINGER_TELEGRAM_CHAT_ID="your_chat_id"
 
 🎯 전략 개요:
-    - 변동성 압축 감지 (밴드폭 < 최근 50일 중 20% 하위)
-    - RSI > 70 + 변동성 압축 시 매수
-    - 분할 익절: BB 80% 위치에서 50% → 하단에서 나머지
+    - 변동성 압축 감지 (밴드폭 < 최근 20일 최소값 × 1.1)
+    - 압축 후 상단 밴드 돌파 + 거래량 증가 + RSI 범위 내일 때 매수
+    - 분할 익절: BB 상단 근처에서 50% → 하단 근처 또는 RSI < 30에서 나머지
 
 🔄 백그라운드 실행 (우분투):
     nohup python main.py --mode monitor-default > /dev/null 2>&1 &
