@@ -1,3 +1,8 @@
+[![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![yfinance](https://img.shields.io/badge/yfinance-410093)](https://pypi.org/project/yfinance/)
+[![Backtrader](https://img.shields.io/badge/Backtrader-4B8BBE)](https://www.backtrader.com)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/bots)
+
 # requirements.txt
 yfinance>=0.2.18
 pandas>=2.0.0
